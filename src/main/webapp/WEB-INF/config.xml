@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<config>
+    <baseurl>https://yoursubdomain.zendesk.com</baseurl>
+    <apiuser>zendeskapiuser</apiuser>
+    <apipassword>zendeskapipassword</apipassword>
+	<proxyuser>proxyuser</proxyuser>
+    <proxypassword>proxypassword</proxypassword>
+	<loglevel>info</loglevel>
+    <rules>
+        <rule>
+            <name>me</name>
+            <method>get</method>
+            <uri>/api/v2/users/me.json</uri>
+            <response>
+                <field>user.id</field>
+                <field>user.name</field>
+                <field>user.role</field>
+            </response>
+        </rule>
+        <rule>
+            <name>all users</name>
+            <method>get</method>
+            <uri>/api/v2/users.json</uri>
+            <response>
+                <field>users.id</field>
+                <field>users.name</field>
+                <field>users.custom_role_id</field>
+                <field>users.active</field>
+                <field>users.suspended</field>
+                <field>next_page</field>
+                <field>previous_page</field>
+                <field>count</field>
+            </response>
+        </rule>
+        <rule>
+            <name>custom roles</name>
+            <method>get</method>
+            <uri>/api/v2/custom_roles.json</uri>
+            <response>
+                <field>custom_roles.id</field>
+                <field>custom_roles.configuration.light_agent</field>
+                <field>next_page</field>
+                <field>previous_page</field>
+                <field>count</field>
+            </response>
+        </rule>
+        <rule>
+            <name>active views</name>
+            <method>get</method>
+            <uri>/api/v2/views/active.json</uri>
+            <response>
+                <field>views.id</field>
+                <field>views.title</field>
+                <field>next_page</field>
+                <field>previous_page</field>
+                <field>count</field>
+            </response>
+        </rule>
+        <rule>
+            <name>view tickets</name>
+            <method>get</method>
+            <uri>/api/v2/views/\d+/tickets.json</uri>
+            <response>
+                <field>tickets.id</field>
+                <field>tickets.status</field>
+                <field>tickets.assignee_id</field>
+                <field>tickets.requester_id</field>
+                <field>tickets.organization_id</field>
+                <field>tickets.tags</field>
+                <field>next_page</field>
+                <field>previous_page</field>
+                <field>count</field>
+            </response>
+        </rule>
+        <rule>
+            <name>update ticket</name>
+            <method>put</method>
+            <uri>/api/v2/tickets/\d+\.json</uri>
+            <request>
+                <field>ticket.assignee_id</field>
+                <field>ticket.comment.body</field>
+                <field>ticket.comment.public</field>
+            </request>
+            <response>
+                <field>ticket.id</field>
+                <field>ticket.assignee_id</field>
+            </response>
+        </rule>
+		<rule>
+            <name>agents tickets</name>
+            <method>get</method>
+            <uri>/api/v2/users/\d+/tickets/assigned.json</uri>
+            <response>
+                <field>tickets.id</field>
+                <field>tickets.status</field>
+                <field>tickets.assignee_id</field>
+                <field>tickets.requester_id</field>
+                <field>tickets.organization_id</field>
+                <field>tickets.tags</field>
+                <field>next_page</field>
+                <field>previous_page</field>
+                <field>count</field>
+            </response>
+        </rule>
+    </rules>
+</config>
