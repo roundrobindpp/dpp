@@ -113,6 +113,12 @@ public class Proxy extends HttpServlet {
         if (uri.equals("/_ah/start")) {
             return;
         }
+
+        if (!req.getScheme().equals("https")) {
+            resp.setStatus(500);
+            resp.getWriter().print("{\"error\":\"Only https protocol is supported\"} ");
+            return;
+        }
 		
         if (uri.equals("/")) {
             resp.setStatus(200);
