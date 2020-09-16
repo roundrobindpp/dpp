@@ -15,6 +15,8 @@ import org.xml.sax.SAXException;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
+
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -108,6 +110,7 @@ public class Proxy extends HttpServlet {
         String method = req.getMethod();
         String uri = "";
         if (req.getQueryString() != null) uri = req.getRequestURI()+"?"+req.getQueryString(); else uri = req.getRequestURI();
+        uri = java.net.URLDecoder.decode(uri, StandardCharsets.UTF_8.name());
         baseUrl = req.getRequestURL().substring(0, req.getRequestURL().length() - req.getRequestURI().length()) + req.getContextPath();
         String authHeader = req.getHeader("Authorization");
         if (uri.equals("/_ah/start")) {
