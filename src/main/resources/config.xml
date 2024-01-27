@@ -5,7 +5,7 @@
     <apipassword>zendeskapipassword</apipassword>
 	<proxyuser>proxyuser</proxyuser>
     <proxypassword>proxypassword</proxypassword>
-    <loglevel>config</loglevel>
+    <loglevel>info</loglevel>
     <rules>
         <rule>
             <name>me</name>
