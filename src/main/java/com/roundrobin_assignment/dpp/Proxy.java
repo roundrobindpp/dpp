@@ -1,366 +1,288 @@
-//Legal notice:
-
 package com.roundrobin_assignment.dpp;
 
-import javax.servlet.*;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
+
 import javax.servlet.http.HttpServlet;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
-import org.xml.sax.SAXException;
 
-import org.w3c.dom.Document;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
+import org.apache.commons.io.IOUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
+
+import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.stream.Collectors;
-import java.nio.charset.Charset;
 import java.util.List;
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.Enumeration;
-import java.io.File;
-import java.io.FileNotFoundException;
 
 public class Proxy extends HttpServlet {
-    private static final Logger log = Logger.getLogger(Proxy.class.getName());
-    String baseUrl;
-    String targetUrl;
-    String logLevel = "";
 
-    private String checkReq (String parent_key, JSONObject json, List<String> fields) {
+    private static final Logger log = Logger.getLogger(Proxy.class.getName());
+    private static Config storedConfig;
+
+    private final boolean isStandaloneMode;
+
+    public Proxy(boolean isStandaloneMode) {
+        this.isStandaloneMode = isStandaloneMode;
+    }
+
+    @Override
+    public void service(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String method = request.getMethod();
+        String uri = request.getQueryString() != null ? request.getRequestURI() + "?" + request.getQueryString() : request.getRequestURI();
+        uri = java.net.URLDecoder.decode(uri, Config.UTF8);
+        if (uri.equals("/_ah/start")) {
+            return;
+        }
+        response.setCharacterEncoding(Config.UTF8.name());
+        response.setContentType(Config.JSON_CONTENT_TYPE);
+
+        if (!"https".equals(isStandaloneMode ? request.getScheme() : request.getHeader("X-Forwarded-Proto"))) {
+            response.setStatus(500);
+            response.getWriter().print("{\"error\":\"Only https protocol is supported\"} ");
+            return;
+        }
+
+        if (uri.equals("/")) {
+            response.setStatus(200);
+            response.getWriter().print("{\"info\":\"DPP is ready for operation\"} ");
+            return;
+        }
+
+        String baseUrl = request.getRequestURL().substring(0, request.getRequestURL().length() - request.getRequestURI().length()) + request.getContextPath();
+        String authHeader = request.getHeader("Authorization");
+
+        if (authHeader == null) {
+            log.warning("Couldn't authenticate empty");
+            response.setStatus(401);
+            response.getWriter().print("{\"error\":\"Couldn't authenticate empty\"} ");
+            return;
+        }
+
+        Config config = getConfig(response);
+        if (config == null) {
+            log.warning("Couldn't load config");
+            return;
+        }
+
+        if (!authHeader.equals(config.getProxyAuthHeader())) {
+            log.warning("Couldn't authenticate you");
+            response.setStatus(401);
+            response.getWriter().print("{\"error\":\"Couldn't authenticate you\"} ");
+            return;
+        }
+
+        String targetRequest;
+        Rule rule = null;
+        if (config.hasRules()) { //empty rules == disable rules check
+            rule = findRule(config.getRules(), method, uri.toLowerCase());
+            if (rule == null) {
+                log.warning(uri + " is not allowed");
+                response.setStatus(403);
+                response.getWriter().print("{\"error\":\"Url " + uri + " is not allowed\"} ");
+                return;
+            }
+            JSONObject requestData = parseRequestData(request);
+            log.info("Request uri: " + uri + " | Rule string: " + rule.getUri() + " | Rule name: " + rule.getName());
+            if (rule.getRequestFields() != null && !rule.getRequestFields().isEmpty()) {
+                String errorField = checkRequest("", requestData, rule.getRequestFields());
+                if (errorField != null) {
+                    log.warning("Field " + errorField + " is not allowed in request body");
+                    response.setStatus(403);
+                    response.getWriter().print("{\"error\":\"Field " + errorField + " is not allowed in request body\"} ");
+                    return;
+                }
+            }
+            targetRequest = requestData != null ? requestData.toString() : null;
+
+        } else { //empty rules == disable rules check
+            targetRequest = IOUtils.toString(request.getInputStream(), Config.UTF8);
+            log.info("Request uri: " + uri + " | Rules empty");
+        }
+
+        String webPage = config.getApiUrl() + uri;
+        log.config("Target url: " + webPage);
+        URL url = new URL(webPage.trim());
+        HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
+        try {
+            urlConnection.setRequestProperty("Accept-Charset", String.format("%s;q=0.9, *;q=0.1", Config.UTF8.name()));
+            urlConnection.setRequestProperty("Authorization", config.getAuthHeader());
+            urlConnection.setRequestProperty("Content-Type", Config.JSON_CONTENT_TYPE);
+            urlConnection.setRequestProperty("Accept", "*/*");
+            urlConnection.setRequestMethod(method);
+
+            for (Enumeration<?> e = request.getHeaderNames(); e.hasMoreElements(); ) {
+                String headerName = (String) e.nextElement();
+                if (headerName.equals("X-Zendesk-Marketplace-Name")
+                        || headerName.equals("X-Zendesk-Marketplace-Organization-Id")
+                        || headerName.equals("X-Zendesk-Marketplace-App-Id")) {
+                    String headerValue = request.getHeader(headerName);
+                    urlConnection.setRequestProperty(headerName, headerValue);
+                }
+            }
+            urlConnection.setDoInput(true);
+            urlConnection.setDoOutput(true);
+            urlConnection.connect();
+            if (targetRequest != null && !targetRequest.isEmpty()) {
+                OutputStreamWriter wr = new OutputStreamWriter(urlConnection.getOutputStream(), Config.UTF8);
+                wr.write(targetRequest);
+                wr.flush();
+                wr.close();
+            }
+            int status = urlConnection.getResponseCode();
+            log.config("Req status: " + status);
+            if (status == HttpURLConnection.HTTP_OK) {
+                InputStream is = urlConnection.getInputStream();
+                InputStreamReader isr = new InputStreamReader(is, Config.UTF8);
+
+                int numCharsRead;
+                char[] charArray = new char[1024];
+                StringBuilder stringBuilder = new StringBuilder();
+                while ((numCharsRead = isr.read(charArray)) > 0) {
+                    stringBuilder.append(charArray, 0, numCharsRead);
+                }
+                isr.close();
+                String targetResponse = stringBuilder.toString();
+                if (config.hasRules()) {
+                    JSONObject responseData = new JSONObject(stringBuilder.toString());
+                    if (log.getLevel() == Level.CONFIG) {
+                        log.config("Original data:" + responseData);
+                    }
+                    responseData = replaceJson("", responseData, rule != null ? rule.getResponseFields() : null);
+                    targetResponse = responseData.toString();
+                }
+                targetResponse = targetResponse.replace(config.getApiUrl(), baseUrl);
+                if (log.getLevel() == Level.CONFIG) {
+                    log.config("Response data:" + targetResponse);
+                }
+                response.getWriter().print(targetResponse);
+            } else {
+                response.setStatus(status);
+                log.warning("Zendesk API error code: " + status + ", message: " + urlConnection.getResponseMessage());
+            }
+        } catch (Exception ex) {
+            StringWriter writer = new StringWriter();
+            PrintWriter printWriter = new PrintWriter(writer);
+            ex.printStackTrace(printWriter);
+            printWriter.flush();
+            log.severe(String.format("Exception when call %s: %s", webPage, writer));
+            response.setStatus(500);
+            response.getWriter().print(String.format("{\"error\":\"Call %s failed: %s\"} ", webPage, ex.getMessage()));
+        } finally {
+            urlConnection.disconnect();
+        }
+    }
+
+    private Rule findRule(List<Rule> rules, String method, String uri) {
+        if (rules == null) {
+            return null;
+        }
+        for (Rule rule : rules) {
+            if (rule.getMethod().equalsIgnoreCase(method) && uri.matches("^" + rule.getUri() + ".*")) {
+                return rule;
+            }
+        }
+        return null;
+    }
+
+    private JSONObject parseRequestData(HttpServletRequest request) {
+        try {
+            return new JSONObject(request.getReader().lines().collect(Collectors.joining(System.lineSeparator())));
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private static Config getConfig(HttpServletResponse resp) throws IOException {
+        if (storedConfig != null) {
+            return storedConfig;
+        }
+        synchronized (Proxy.class) {
+            if (storedConfig == null) {
+                try {
+                    storedConfig = new ConfigParser().parse(Proxy.class.getResourceAsStream("/config.xml"));
+                } catch (Exception ex) {
+                    resp.setStatus(500);
+                    String error = String.format("Fail to load config.xml. ERROR: %s, Cause: %s", ex.getMessage(), ex.getCause());
+                    log.warning(error);
+                    resp.getWriter().print(String.format("{\"error\":\"%s\"} ", error));
+                    return null;
+                }
+                switch (storedConfig.getLogLevel().toLowerCase()) {
+                    case "warning" -> log.setLevel(Level.WARNING);
+                    case "config" -> log.setLevel(Level.CONFIG);
+                    default -> log.setLevel(Level.INFO);
+                }
+            }
+        }
+        return storedConfig;
+    }
+
+    private String checkRequest(String parent_key, JSONObject json, List<String> fields) {
+        if (fields == null || fields.isEmpty()) {
+            return null;
+        }
         Iterator<?> keys = json.keys();
-        String error_field = null;
-        while( keys.hasNext() ) {
-            String key = (String)keys.next();
+        String error_field;
+        while (keys.hasNext()) {
+            String key = (String) keys.next();
             String check_key;
             if (parent_key != null && !parent_key.isEmpty()) {
                 check_key = parent_key + "." + key;
-            }
-            else {
+            } else {
                 check_key = key;
             }
             if (!fields.contains(check_key)) {
                 if (json.get(key) instanceof JSONObject) {
-                    error_field = checkReq(check_key, json.getJSONObject(key), fields);
+                    error_field = checkRequest(check_key, json.getJSONObject(key), fields);
                     if (error_field != null) {
                         return error_field;
                     }
 
-                }
-                else {
-                        error_field = key;
-                        return error_field;
+                } else {
+                    error_field = key;
+                    return error_field;
                 }
             }
         }
         return null;
     }
 
-    private JSONObject replaceJson (String parent_key, JSONObject json, List<String> fields) {
+    private JSONObject replaceJson(String parent_key, JSONObject json, List<String> fields) {
+        if (fields == null || fields.isEmpty()) {
+            return json;
+        }
         Iterator<?> keys = json.keys();
-        while( keys.hasNext() ) {
-            String key = (String)keys.next();
+        while (keys.hasNext()) {
+            String key = (String) keys.next();
             String check_key;
             if (parent_key != null && !parent_key.isEmpty()) {
                 check_key = parent_key + "." + key;
-            }
-            else {
+            } else {
                 check_key = key;
             }
 
             if (!fields.contains(check_key)) {
                 if (json.get(key) instanceof JSONObject) {
-                    JSONObject json_sub = replaceJson(check_key, json.getJSONObject(key), fields);
+                    replaceJson(check_key, json.getJSONObject(key), fields);
                 } else if (json.get(key) instanceof JSONArray) {
                     JSONArray json_array = json.getJSONArray(key);
-                    for (int i = 0 ; i < json_array.length(); i++) {
+                    for (int i = 0; i < json_array.length(); i++) {
                         if (json_array.get(i) instanceof JSONObject) {
                             JSONObject json_sub = json_array.getJSONObject(i);
-                            json_sub = replaceJson(check_key, json_sub, fields);
-                        }
-                        else {
+                            replaceJson(check_key, json_sub, fields);
+                        } else {
                             json_array.put(i, JSONObject.NULL);
                         }
                     }
-                }
-                else {json.put(key, JSONObject.NULL);
+                } else {
+                    json.put(key, JSONObject.NULL);
                 }
             }
         }
         return json;
     }
-
-    @Override
-    public void service(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        String method = req.getMethod();
-        String uri = "";
-        if (req.getQueryString() != null) uri = req.getRequestURI()+"?"+req.getQueryString(); else uri = req.getRequestURI();
-        uri = java.net.URLDecoder.decode(uri, StandardCharsets.UTF_8.name());
-        baseUrl = req.getRequestURL().substring(0, req.getRequestURL().length() - req.getRequestURI().length()) + req.getContextPath();
-        String authHeader = req.getHeader("Authorization");
-        if (uri.equals("/_ah/start")) {
-            return;
-        }
-
-        if (!req.getScheme().equals("https")) {
-            resp.setStatus(500);
-            resp.getWriter().print("{\"error\":\"Only https protocol is supported\"} ");
-            return;
-        }
-		
-        if (uri.equals("/")) {
-            resp.setStatus(200);
-            resp.getWriter().print("{\"info\":\"DPP is ready for operation\"} ");
-            return;
-        }
-
-        if (authHeader == null)
-        {
-            log.warning("Couldn't authenticate you");
-            resp.setStatus(401);
-            resp.getWriter().print("{\"error\":\"Couldn't authenticate you\"} ");
-            return;
-        }
-
-
-        String apiurl = "";
-        String user = "";
-        String password = "";
-        String proxyuser = "";
-        String proxypassword = "";
-        String rule_method;
-        String rule_uri = "";
-        String rule_name = "";
-        Node current_rule = null;
-        NodeList rule_configs;
-        NodeList rules = null;
-        Node rule_config;
-        JSONObject req_data;
-        Boolean find_rule = false;
-		
-        try {
-            req_data = new JSONObject(req.getReader().lines().collect(Collectors.joining(System.lineSeparator())));
-        }
-        catch (Exception e) {
-            req_data = null;
-        }
-        JSONObject resp_data;
-        List<String> lt_req_fields = new ArrayList();
-        List<String> lt_resp_fields = new ArrayList();
-        resp.setContentType("application/javascript");
-        resp.setCharacterEncoding("UTF-8");
-        try {
-            DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
-            DocumentBuilder db = dbf.newDocumentBuilder();
-            Document doc = db.parse(new File("WEB-INF/config.xml"));
-            NodeList nodelist = doc.getChildNodes();
-            Node configNode = nodelist.item(0);
-            nodelist = configNode.getChildNodes();
-
-            for (int i=0; i < nodelist.getLength(); i++) {
-                Node subnode = nodelist.item(i);
-                if (subnode.getNodeName().equals("baseurl")) {
-                    apiurl = subnode.getTextContent();
-                }
-                if (subnode.getNodeName().equals("apiuser")) {
-                    user = subnode.getTextContent();
-                }
-                if (subnode.getNodeName().equals("apipassword")) {
-                    password = subnode.getTextContent();
-                }
-                if (subnode.getNodeName().equals("proxyuser")) {
-                    proxyuser = subnode.getTextContent();
-                }
-                if (subnode.getNodeName().equals("proxypassword")) {
-                    proxypassword = subnode.getTextContent();
-                }
-                if (subnode.getNodeName().equals("loglevel")) {
-                    logLevel = subnode.getTextContent();
-                }
-                if (subnode.getNodeName().equals("rules")) {
-                    rules = subnode.getChildNodes();
-                }
-
-            }
-
-            String checkAuthString = proxyuser + ":" + proxypassword;
-            byte[] checkAuthEncBytes = Base64.getEncoder().encode(checkAuthString.getBytes());
-            String checkAuthStringEnc = new String(checkAuthEncBytes);
-            if (!authHeader.equals("Basic " + checkAuthStringEnc)) {
-                log.warning("Couldn't authenticate you");
-                resp.setStatus(401);
-                resp.getWriter().print("{\"error\":\"Couldn't authenticate you\"} ");
-                return;
-            }
-
-            switch(logLevel.toLowerCase()) {
-                case "warning" :
-                    log.setLevel(Level.WARNING);
-                    break;
-                case "config" :
-                    log.setLevel(Level.CONFIG);
-                    break;
-                default :
-                    log.setLevel(Level.INFO);
-            }
-
-            if (rules != null) {
-                for (int j = 0; j < rules.getLength(); j++) {
-                    Node rule = rules.item(j);
-                    if (rule.getNodeName().equals("rule")) {
-                        rule_configs = rule.getChildNodes();
-                        rule_name = "";
-                        rule_method = "";
-                        rule_uri = "";
-                        lt_resp_fields.clear();
-                        lt_req_fields.clear();
-                        for (int r = 0; r < rule_configs.getLength(); r++) {
-                            rule_config = rule_configs.item(r);
-                            if (rule_config.getNodeName().equals("method")) {
-                                rule_method = rule_config.getTextContent();
-                            }
-                            if (rule_config.getNodeName().equals("uri")) {
-                                rule_uri = rule_config.getTextContent();
-                            }
-                            if (rule_config.getNodeName().equals("name")) {
-                                rule_name = rule_config.getTextContent();
-                            }
-                            if (rule_config.getNodeName().equals("response")) {
-                                NodeList resp_fields = rule_config.getChildNodes();
-                                for (int f = 0; f < resp_fields.getLength(); f++) {
-                                    Node field = resp_fields.item(f);
-                                    if (!field.getTextContent().isEmpty()) {
-                                        lt_resp_fields.add(field.getTextContent());
-                                    }
-                                }
-                            }
-                            if (rule_config.getNodeName().equals("request")) {
-                                NodeList req_fields = rule_config.getChildNodes();
-                                for (int f = 0; f < req_fields.getLength(); f++) {
-                                    Node field = req_fields.item(f);
-                                    if (!field.getTextContent().isEmpty()) {
-                                        lt_req_fields.add(field.getTextContent());
-                                    }
-                                }
-                            }
-                        }
-                        if (rule_name != null) {
-                            if ((rule_method.toUpperCase().equals(method.toUpperCase())) && (uri.toLowerCase().matches("^"+rule_uri.toLowerCase()+".*"))) {
-                                current_rule = rule;
-                                find_rule = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            if (!find_rule) {
-                log.warning(uri+" is not allowed");
-                resp.setStatus(403);
-                resp.getWriter().print("{\"error\":\""+uri+" is not allowed\"} ");
-                return;
-            }
-            log.info("Request uri: " + uri+" | Rule string: " + rule_uri+" | Rule name: " + rule_name );
-            if (lt_req_fields.size() > 0) {
-                String lv_error_field = checkReq("", req_data, lt_req_fields);
-                if (lv_error_field != null) {
-                    log.warning("Field " + lv_error_field+" is not allowed in request body");
-                    resp.setStatus(403);
-                    resp.getWriter().print("{\"error\":\"Field "+lv_error_field+" is not allowed in request body\"} ");
-                    return;
-                }
-
-            }
-            String webPage = apiurl + uri;
-            log.config("Target url: " + webPage);
-            targetUrl = apiurl;
-            String authString = user + ":" + password;
-            byte[] authEncBytes = Base64.getEncoder().encode(authString.getBytes());
-            String authStringEnc = new String(authEncBytes);
-            URL url = new URL(webPage.trim());
-            HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
-            try {
-                urlConnection.setRequestProperty("Accept-Charset", "UTF-8");
-                urlConnection.setRequestProperty("Authorization", "Basic " + authStringEnc);
-                urlConnection.setRequestProperty("Content-Type", "application/json");
-                urlConnection.setRequestMethod(method);
-
-                for (Enumeration<?> e = req.getHeaderNames(); e.hasMoreElements();) {
-                    String headerName = (String) e.nextElement();
-                    if (headerName.equals("X-Zendesk-Marketplace-Name")||headerName.equals("X-Zendesk-Marketplace-Organization-Id")||headerName.equals("X-Zendesk-Marketplace-App-Id")) {
-                        String headerValue = req.getHeader(headerName);
-                        urlConnection.setRequestProperty(headerName, headerValue);
-                    }
-                }
-                urlConnection.setDoInput(true);
-                urlConnection.setDoOutput(true);
-                urlConnection.connect();
-                if (req_data != null) {
-                    OutputStreamWriter wr = new OutputStreamWriter(urlConnection.getOutputStream(), "UTF-8");
-                    wr.write(req_data.toString());
-                    wr.flush();
-                    wr.close();
-                }
-                int status = urlConnection.getResponseCode();
-                log.config("Req status: " + status);
-                if (status == HttpURLConnection.HTTP_OK) {
-                    InputStream is = urlConnection.getInputStream();
-                    Charset charset = Charset.forName("UTF8");
-                    InputStreamReader isr = new InputStreamReader(is, charset);
-
-                    int numCharsRead;
-                    char[] charArray = new char[1024];
-                    StringBuffer sb = new StringBuffer();
-                    while ((numCharsRead = isr.read(charArray)) > 0) {
-                        sb.append(charArray, 0, numCharsRead);
-                    }
-                    isr.close();
-                    resp_data = new JSONObject(sb.toString());
-                    if (log.getLevel()==Level.CONFIG) log.config("Original data:" + resp_data.toString());
-                    resp_data = replaceJson("", resp_data, lt_resp_fields);
-                    if (log.getLevel()==Level.CONFIG) log.config("Responce data:" + resp_data.toString().replace(targetUrl, baseUrl));
-                    resp.getWriter().print(resp_data.toString().replace(targetUrl, baseUrl));
-                } else {
-                    resp.setStatus(status);
-                    log.warning("Zendesk API error code: "+ status + ", message: " + urlConnection.getResponseMessage());
-                }
-            }
-            finally {
-                urlConnection.disconnect();
-            }
-        }
-        catch (ParserConfigurationException ex) {
-            resp.setStatus(500);
-            log.warning("Wrong configuration file");
-            resp.getWriter().print("{\"error\":\"Wrong configuration file\"} ");
-        }
-        catch (SAXException ex) {
-            resp.setStatus(500);
-            log.warning("Wrong configuration file");
-            resp.getWriter().print("{\"error\":\"Wrong configuration file\"} ");
-        }
-        catch (FileNotFoundException ex) {
-            resp.setStatus(500);
-            log.warning("Configuration file not found");
-            resp.getWriter().print("{\"error\":\"Configuration file not found\"} ");
-        }
-    }
-
-    @Override
-    public void destroy() {}
 }

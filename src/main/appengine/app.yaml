@@ -1,0 +1,10 @@
+runtime: java17
+instance_class: F1
+service: 'default'
+
+automatic_scaling:
+  max_idle_instances: 1
+  max_pending_latency: 10000ms
+  max_concurrent_requests: 50
+
+code_lock: true
