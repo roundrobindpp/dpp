@@ -3,6 +3,7 @@
     <baseurl>https://yoursubdomain.zendesk.com</baseurl>
     <apiuser>zendeskapiuser</apiuser>
     <apipassword>zendeskapipassword</apipassword>
+<!--	<proxyurl>proxyurl</proxyurl>-->
 	<proxyuser>proxyuser</proxyuser>
     <proxypassword>proxypassword</proxypassword>
     <loglevel>info</loglevel>

@@ -13,6 +13,7 @@ public class Config {
     private String user = "";
     private String password = "";
     private String authHeader = "";
+    private String proxyUrl = "";
     private String proxyUser = "";
     private String proxyPassword = "";
     private String proxyAuthHeader = "";
@@ -42,6 +43,14 @@ public class Config {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public String getProxyUrl() {
+        return proxyUrl;
+    }
+
+    public void setProxyUrl(String proxyUrl) {
+        this.proxyUrl = proxyUrl;
     }
 
     public String getProxyUser() {

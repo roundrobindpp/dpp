@@ -8,6 +8,7 @@ import javax.servlet.http.HttpServlet;
 import org.apache.commons.io.IOUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.springframework.util.StringUtils;
 
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -155,7 +156,8 @@ public class Proxy extends HttpServlet {
                     responseData = replaceJson("", responseData, rule != null ? rule.getResponseFields() : null);
                     targetResponse = responseData.toString();
                 }
-                targetResponse = targetResponse.replace(config.getApiUrl(), baseUrl);
+                targetResponse = targetResponse.replace(config.getApiUrl(),
+                        StringUtils.hasLength(config.getProxyUrl()) ? config.getProxyUrl() : baseUrl);
                 if (log.getLevel() == Level.CONFIG) {
                     log.config("Response data:" + targetResponse);
                 }

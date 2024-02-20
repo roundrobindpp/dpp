@@ -36,6 +36,9 @@ public class ConfigParser {
                 if (subnode.getNodeName().equals("apipassword")) {
                     config.setPassword(subnode.getTextContent());
                 }
+                if (subnode.getNodeName().equals("proxyurl")) {
+                    config.setProxyUrl(subnode.getTextContent());
+                }
                 if (subnode.getNodeName().equals("proxyuser")) {
                     config.setProxyUser(subnode.getTextContent());
                 }
