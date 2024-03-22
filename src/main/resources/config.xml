@@ -4,7 +4,7 @@
     <apiuser>zendeskapiuser</apiuser>
     <apipassword>zendeskapipassword</apipassword>
 <!--	<proxyurl>proxyurl</proxyurl>-->
-	<proxyuser>proxyuser</proxyuser>
+    <proxyuser>proxyuser</proxyuser>
     <proxypassword>proxypassword</proxypassword>
     <loglevel>info</loglevel>
     <rules>
@@ -28,6 +28,7 @@
                 <field>users.custom_role_id</field>
                 <field>users.active</field>
                 <field>users.suspended</field>
+                <field>users.tags</field>
                 <field>next_page</field>
                 <field>previous_page</field>
                 <field>count</field>
@@ -40,6 +41,30 @@
             <response>
                 <field>custom_roles.id</field>
                 <field>custom_roles.configuration.light_agent</field>
+                <field>next_page</field>
+                <field>previous_page</field>
+                <field>count</field>
+            </response>
+        </rule>
+        <rule>
+            <name>groups</name>
+            <method>get</method>
+            <uri>/api/v2/groups.json</uri>
+            <response>
+                <field>groups.id</field>
+                <field>groups.name</field>
+                <field>next_page</field>
+                <field>previous_page</field>
+                <field>count</field>
+            </response>
+        </rule>
+        <rule>
+            <name>group memberships</name>
+            <method>get</method>
+            <uri>/api/v2/group_memberships.json</uri>
+            <response>
+                <field>group_memberships.group_id</field>
+                <field>group_memberships.user_id</field>
                 <field>next_page</field>
                 <field>previous_page</field>
                 <field>count</field>
@@ -85,6 +110,17 @@
             <response>
                 <field>ticket.id</field>
                 <field>ticket.assignee_id</field>
+            </response>
+        </rule>
+        <rule>
+            <name>update ticket tags</name>
+            <method>put</method>
+            <uri>/api/v2/tickets/\d+/tags.json</uri>
+            <request>
+                <field>tags</field>
+            </request>
+            <response>
+                <field>tags</field>
             </response>
         </rule>
 		<rule>
