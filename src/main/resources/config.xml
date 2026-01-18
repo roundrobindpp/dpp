@@ -29,9 +29,8 @@
                 <field>users.active</field>
                 <field>users.suspended</field>
                 <field>users.tags</field>
-                <field>next_page</field>
-                <field>previous_page</field>
-                <field>count</field>
+                <field>meta.has_more</field>
+                <field>links.next</field>
             </response>
         </rule>
         <rule>
@@ -65,9 +64,8 @@
             <response>
                 <field>group_memberships.group_id</field>
                 <field>group_memberships.user_id</field>
-                <field>next_page</field>
-                <field>previous_page</field>
-                <field>count</field>
+                <field>meta.has_more</field>
+                <field>links.next</field>
             </response>
         </rule>
         <rule>
@@ -123,7 +121,7 @@
                 <field>tags</field>
             </response>
         </rule>
-		<rule>
+        <rule>
             <name>agents tickets</name>
             <method>get</method>
             <uri>/api/v2/users/\d+/tickets/assigned.json</uri>
