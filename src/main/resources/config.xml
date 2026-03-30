@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <config>
     <baseurl>https://yoursubdomain.zendesk.com</baseurl>
-    <apiuser>zendeskapiuser</apiuser>
-    <apipassword>zendeskapipassword</apipassword>
+    <apiuser>zendeskapiuser/token</apiuser>
+    <apipassword>zendeskapitoken</apipassword>
 <!--	<proxyurl>proxyurl</proxyurl>-->
     <proxyuser>proxyuser</proxyuser>
     <proxypassword>proxypassword</proxypassword>
@@ -39,6 +39,7 @@
             <uri>/api/v2/custom_roles.json</uri>
             <response>
                 <field>custom_roles.id</field>
+                <field>custom_roles.role_type</field>
                 <field>custom_roles.configuration.light_agent</field>
                 <field>next_page</field>
                 <field>previous_page</field>
@@ -121,7 +122,7 @@
                 <field>tags</field>
             </response>
         </rule>
-        <rule>
+		<rule>
             <name>agents tickets</name>
             <method>get</method>
             <uri>/api/v2/users/\d+/tickets/assigned.json</uri>
