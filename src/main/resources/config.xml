@@ -70,6 +70,17 @@
             </response>
         </rule>
         <rule>
+            <name>assignable group memberships</name>
+            <method>get</method>
+            <uri>/api/v2/group_memberships/assignable.json</uri>
+            <response>
+                <field>group_memberships.group_id</field>
+                <field>group_memberships.user_id</field>
+                <field>meta.has_more</field>
+                <field>links.next</field>
+            </response>
+        </rule>
+        <rule>
             <name>active views</name>
             <method>get</method>
             <uri>/api/v2/views/active.json</uri>
