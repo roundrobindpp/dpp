@@ -7,3 +7,13 @@ automatic_scaling:
   max_instances: 2
   max_pending_latency: 10000ms
   max_concurrent_requests: 50
+
+handlers:
+  - url: /_ah/.*
+    secure: optional
+    script: auto
+
+  - url: /.*
+    secure: always
+    redirect_http_response_code: 301
+    script: auto

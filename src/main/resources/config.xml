@@ -1,12 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <config>
-    <baseurl>https://yoursubdomain.zendesk.com</baseurl>
-    <apiuser>zendeskapiuser/token</apiuser>
-    <apipassword>zendeskapitoken</apipassword>
-<!--	<proxyurl>proxyurl</proxyurl>-->
-    <proxyuser>proxyuser</proxyuser>
-    <proxypassword>proxypassword</proxypassword>
-    <loglevel>info</loglevel>
     <rules>
         <rule>
             <name>me</name>
@@ -16,6 +9,7 @@
                 <field>user.id</field>
                 <field>user.name</field>
                 <field>user.role</field>
+                <field>user.role_type</field>
             </response>
         </rule>
         <rule>
@@ -159,6 +153,11 @@
                 <field>previous_page</field>
                 <field>count</field>
             </response>
+        </rule>
+        <rule>
+            <name>revoke OAuth token</name>
+            <method>delete</method>
+            <uri>/api/v2/oauth/tokens/current.json</uri>
         </rule>
     </rules>
 </config>

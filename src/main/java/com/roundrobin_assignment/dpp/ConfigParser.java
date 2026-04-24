@@ -1,5 +1,7 @@
 package com.roundrobin_assignment.dpp;
 
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -8,12 +10,26 @@ import org.xml.sax.SAXException;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
-import java.io.*;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 
+@Configuration
 public class ConfigParser {
+
+    private static final String CONFIG_FILE = "/config.xml";
+
+    @Bean
+    public Config config() {
+        try {
+            return parse(Config.class.getResourceAsStream(CONFIG_FILE));
+        } catch (Exception ex) {
+            throw new RuntimeException(String.format("Fail to load %s. ERROR: %s, Cause: %s", CONFIG_FILE, ex.getMessage(), ex.getCause()));
+        }
+    }
+
     public Config parse(InputStream configStream) {
         Config config = new Config();
         NodeList rules = null;
@@ -27,31 +43,9 @@ public class ConfigParser {
 
             for (int i = 0; i < nodelist.getLength(); i++) {
                 Node subnode = nodelist.item(i);
-                if (subnode.getNodeName().equals("baseurl")) {
-                    config.setApiUrl(subnode.getTextContent());
-                }
-                if (subnode.getNodeName().equals("apiuser")) {
-                    config.setUser(subnode.getTextContent());
-                }
-                if (subnode.getNodeName().equals("apipassword")) {
-                    config.setPassword(subnode.getTextContent());
-                }
-                if (subnode.getNodeName().equals("proxyurl")) {
-                    config.setProxyUrl(subnode.getTextContent());
-                }
-                if (subnode.getNodeName().equals("proxyuser")) {
-                    config.setProxyUser(subnode.getTextContent());
-                }
-                if (subnode.getNodeName().equals("proxypassword")) {
-                    config.setProxyPassword(subnode.getTextContent());
-                }
-                if (subnode.getNodeName().equals("loglevel")) {
-                    config.setLogLevel(subnode.getTextContent());
-                }
                 if (subnode.getNodeName().equals("rules")) {
                     rules = subnode.getChildNodes();
                 }
-
             }
         } catch (ParserConfigurationException ex) {
             throw new RuntimeException("Wrong configuration file: parse error", ex);
@@ -62,9 +56,6 @@ public class ConfigParser {
         } catch (IOException ex) {
             throw new RuntimeException("Read configuration file error", ex);
         }
-
-        config.setAuthHeader(authHeader(config.getUser(), config.getPassword()));
-        config.setProxyAuthHeader(authHeader(config.getProxyUser(), config.getProxyPassword()));
 
         config.setRules(parseRules(rules));
 
@@ -108,7 +99,7 @@ public class ConfigParser {
         return rules;
     }
 
-    private static List<String> parseFields(NodeList fields) {
+    private List<String> parseFields(NodeList fields) {
         List<String> result = new ArrayList<>();
         for (int i = 0; i < fields.getLength(); i++) {
             Node field = fields.item(i);
@@ -117,11 +108,5 @@ public class ConfigParser {
             }
         }
         return result;
-    }
-
-    private String authHeader(String user, String password) {
-        String authString = user + ":" + password;
-        byte[] authEncBytes = Base64.getEncoder().encode(authString.getBytes());
-        return "Basic " + new String(authEncBytes);
     }
 }

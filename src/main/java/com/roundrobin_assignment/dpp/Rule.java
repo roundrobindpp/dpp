@@ -48,4 +48,8 @@ public class Rule {
     public void setResponseFields(List<String> responseFields) {
         this.responseFields = responseFields;
     }
+    
+    public boolean isEmpty() {
+        return name == null && method == null && uri == null;
+    }
 }
